@@ -4,7 +4,7 @@ class TableService:
     def __init__(self, db_connection):
         self.db = db_connection
     
-    def get_table_data(self, table_name, page=1, per_page=50, search_column=None, search_value=None, sort_column=None, sort_direction='ASC'):
+    def get_table_data(self, table_name, page=1, per_page=50, search_column=None, search_value=None, sort_column=None, sort_direction='ASC', advanced_filters=None):
         """
         테이블 데이터를 페이지네이션과 검색 기능과 함께 조회
         
@@ -16,6 +16,7 @@ class TableService:
             search_value: 검색값
             sort_column: 정렬할 컬럼명
             sort_direction: 정렬 방향 (ASC/DESC)
+            advanced_filters: 고급 검색 필터 리스트
         """
         try:
             # 기본 쿼리 구성
@@ -26,7 +27,11 @@ class TableService:
             where_clause = ""
             params = []
             
-            if search_column and search_value:
+            # 고급 검색 처리
+            if advanced_filters:
+                where_clause, params = self._build_advanced_where_clause(advanced_filters, table_name)
+            # 기본 검색 처리
+            elif search_column and search_value:
                 where_clause = f" WHERE {search_column} LIKE ?"
                 params.append(f"%{search_value}%")
             
@@ -171,3 +176,88 @@ class TableService:
             
         except Exception as e:
             return []
+    
+    def _build_advanced_where_clause(self, filters, table_name):
+        """고급 검색 필터들을 WHERE 절로 변환"""
+        if not filters:
+            return "", []
+        
+        where_conditions = []
+        params = []
+        
+        for i, filter_item in enumerate(filters):
+            column = filter_item.get('column')
+            operator = filter_item.get('operator', 'contains')
+            value = filter_item.get('value', '')
+            logic = filter_item.get('logic', 'AND')
+            
+            if not column:
+                continue
+                
+            # 컬럼명 매핑 (orders_view의 경우 JOIN된 테이블의 컬럼 처리)
+            mapped_column = self._map_column_name(column, table_name)
+            
+            # 조건 구성
+            condition = self._build_filter_condition(mapped_column, operator, value, params)
+            
+            if condition:
+                if i == 0:
+                    where_conditions.append(condition)
+                else:
+                    where_conditions.append(f" {logic} {condition}")
+        
+        if where_conditions:
+            return " WHERE " + "".join(where_conditions), params
+        else:
+            return "", []
+    
+    def _map_column_name(self, column, table_name):
+        """테이블별 컬럼명 매핑"""
+        if table_name == 'orders_view':
+            column_mapping = {
+                'customer_name': 'c.name',
+                'customer_city': 'c.city',
+                'product_name': 'p.name',
+                'product_category': 'p.category',
+                'quantity': 'o.quantity',
+                'unit_price': 'o.unit_price',
+                'total_amount': 'o.total_amount',
+                'order_date': 'o.order_date',
+                'status': 'o.status',
+                'id': 'o.id'
+            }
+            return column_mapping.get(column, column)
+        else:
+            return column
+    
+    def _build_filter_condition(self, column, operator, value, params):
+        """단일 필터 조건을 SQL 조건으로 변환"""
+        if operator == 'contains':
+            params.append(f"%{value}%")
+            return f"{column} LIKE ?"
+        elif operator == 'equals':
+            params.append(value)
+            return f"{column} = ?"
+        elif operator == 'not_equals':
+            params.append(value)
+            return f"{column} != ?"
+        elif operator == 'starts_with':
+            params.append(f"{value}%")
+            return f"{column} LIKE ?"
+        elif operator == 'ends_with':
+            params.append(f"%{value}")
+            return f"{column} LIKE ?"
+        elif operator == 'greater_than':
+            params.append(value)
+            return f"{column} > ?"
+        elif operator == 'less_than':
+            params.append(value)
+            return f"{column} < ?"
+        elif operator == 'is_null':
+            return f"{column} IS NULL"
+        elif operator == 'is_not_null':
+            return f"{column} IS NOT NULL"
+        else:
+            # 기본값: contains
+            params.append(f"%{value}%")
+            return f"{column} LIKE ?"

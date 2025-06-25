@@ -32,7 +32,9 @@ class AdvancedTable {
             data: [],
             columns: [],
             pagination: {},
-            loading: false
+            loading: false,
+            advancedFilters: [], // 고급 검색 필터들
+            filterCounter: 0 // 필터 ID 카운터
         };
         
         this.init();
@@ -95,7 +97,8 @@ class AdvancedTable {
     
     renderSearchForm() {
         return `
-            <div class="form-inline">
+            <!-- 기본 검색 -->
+            <div class="form-inline mb-2">
                 <select class="form-control form-control-sm mr-2" id="${this.containerId}_searchColumn">
                     <option value="">검색 컬럼 선택</option>
                 </select>
@@ -104,9 +107,38 @@ class AdvancedTable {
                 <button type="button" class="btn btn-sm btn-primary mr-2" id="${this.containerId}_searchBtn">
                     <i class="fas fa-search"></i> 검색
                 </button>
-                <button type="button" class="btn btn-sm btn-secondary" id="${this.containerId}_resetBtn">
+                <button type="button" class="btn btn-sm btn-secondary mr-2" id="${this.containerId}_resetBtn">
                     <i class="fas fa-undo"></i> 초기화
                 </button>
+            </div>
+            
+            <!-- 고급 검색 아코디언 -->
+            <div class="card card-outline card-primary">
+                <div class="card-header p-2">
+                    <a class="btn btn-link btn-sm p-0" data-toggle="collapse" href="#${this.containerId}_advancedSearch" 
+                       role="button" aria-expanded="false" aria-controls="${this.containerId}_advancedSearch">
+                        <i class="fas fa-filter"></i> 고급 검색 (복합 조건)
+                        <i class="fas fa-chevron-down float-right mt-1"></i>
+                    </a>
+                </div>
+                <div class="collapse" id="${this.containerId}_advancedSearch">
+                    <div class="card-body p-3">
+                        <div id="${this.containerId}_advancedFilters">
+                            <!-- 동적으로 생성될 필터들 -->
+                        </div>
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-sm btn-success mr-2" id="${this.containerId}_addFilter">
+                                <i class="fas fa-plus"></i> 조건 추가
+                            </button>
+                            <button type="button" class="btn btn-sm btn-primary mr-2" id="${this.containerId}_applyAdvanced">
+                                <i class="fas fa-search"></i> 복합 검색 실행
+                            </button>
+                            <button type="button" class="btn btn-sm btn-secondary" id="${this.containerId}_clearAdvanced">
+                                <i class="fas fa-trash"></i> 모든 조건 삭제
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
     }
@@ -137,6 +169,19 @@ class AdvancedTable {
         $(`#${this.containerId}_resetBtn`).on('click', function() {
             self.reset();
         });
+        
+        // 고급 검색 이벤트들
+        $(`#${this.containerId}_addFilter`).on('click', function() {
+            self.addAdvancedFilter();
+        });
+        
+        $(`#${this.containerId}_applyAdvanced`).on('click', function() {
+            self.applyAdvancedSearch();
+        });
+        
+        $(`#${this.containerId}_clearAdvanced`).on('click', function() {
+            self.clearAdvancedFilters();
+        });
     }
     
     async loadData() {
@@ -156,6 +201,11 @@ class AdvancedTable {
                 params.append('search_value', this.state.searchValue);
             }
             
+            // 고급 검색 필터들 추가
+            if (this.state.advancedFilters.length > 0) {
+                params.append('advanced_filters', JSON.stringify(this.state.advancedFilters));
+            }
+            
             if (this.state.sortColumn) {
                 params.append('sort_column', this.state.sortColumn);
                 params.append('sort_direction', this.state.sortDirection);
@@ -173,6 +223,7 @@ class AdvancedTable {
                 this.renderPagination();
                 this.renderInfo();
                 this.populateSearchColumns();
+                this.renderAdvancedFilters();
             } else {
                 throw new Error(result.error);
             }
@@ -393,10 +444,13 @@ class AdvancedTable {
         this.state.currentPage = 1;
         this.state.sortColumn = null;
         this.state.sortDirection = 'ASC';
+        this.state.advancedFilters = [];
+        this.state.filterCounter = 0;
         
         $(`#${this.containerId}_searchColumn`).val('');
         $(`#${this.containerId}_searchValue`).val('');
         
+        this.renderAdvancedFilters();
         this.loadData();
     }
     
@@ -421,6 +475,174 @@ class AdvancedTable {
     
     refresh() {
         this.loadData();
+    }
+    
+    // 고급 검색 관련 메서드들
+    addAdvancedFilter() {
+        const filterId = ++this.state.filterCounter;
+        const filter = {
+            id: filterId,
+            column: '',
+            operator: 'contains',
+            value: '',
+            logic: 'AND'
+        };
+        
+        this.state.advancedFilters.push(filter);
+        this.renderAdvancedFilters();
+    }
+    
+    renderAdvancedFilters() {
+        const container = $(`#${this.containerId}_advancedFilters`);
+        
+        if (this.state.advancedFilters.length === 0) {
+            container.html(`
+                <div class="text-muted text-center py-3">
+                    <i class="fas fa-info-circle"></i>
+                    아직 추가된 검색 조건이 없습니다. "조건 추가" 버튼을 클릭해 주세요.
+                </div>
+            `);
+            return;
+        }
+        
+        let html = '';
+        this.state.advancedFilters.forEach((filter, index) => {
+            html += this.renderSingleFilter(filter, index);
+        });
+        
+        container.html(html);
+        
+        // 필터 이벤트 바인딩
+        this.bindFilterEvents();
+    }
+    
+    renderSingleFilter(filter, index) {
+        const logicDisplay = index === 0 ? '' : `
+            <div class="col-md-1 text-center">
+                <select class="form-control form-control-sm" data-filter-id="${filter.id}" data-field="logic">
+                    <option value="AND" ${filter.logic === 'AND' ? 'selected' : ''}>AND</option>
+                    <option value="OR" ${filter.logic === 'OR' ? 'selected' : ''}>OR</option>
+                </select>
+            </div>
+        `;
+        
+        return `
+            <div class="row mb-2 filter-row" data-filter-id="${filter.id}">
+                ${logicDisplay}
+                <div class="col-md-3">
+                    <select class="form-control form-control-sm" data-filter-id="${filter.id}" data-field="column">
+                        <option value="">컬럼 선택</option>
+                        ${this.getColumnOptions(filter.column)}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-control form-control-sm" data-filter-id="${filter.id}" data-field="operator">
+                        <option value="contains" ${filter.operator === 'contains' ? 'selected' : ''}>포함</option>
+                        <option value="equals" ${filter.operator === 'equals' ? 'selected' : ''}>같음</option>
+                        <option value="not_equals" ${filter.operator === 'not_equals' ? 'selected' : ''}>다름</option>
+                        <option value="starts_with" ${filter.operator === 'starts_with' ? 'selected' : ''}>시작</option>
+                        <option value="ends_with" ${filter.operator === 'ends_with' ? 'selected' : ''}>끝남</option>
+                        <option value="greater_than" ${filter.operator === 'greater_than' ? 'selected' : ''}>초과</option>
+                        <option value="less_than" ${filter.operator === 'less_than' ? 'selected' : ''}>미만</option>
+                        <option value="is_null" ${filter.operator === 'is_null' ? 'selected' : ''}>NULL</option>
+                        <option value="is_not_null" ${filter.operator === 'is_not_null' ? 'selected' : ''}>NOT NULL</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <input type="text" class="form-control form-control-sm" 
+                           placeholder="검색값" 
+                           value="${filter.value}"
+                           data-filter-id="${filter.id}" 
+                           data-field="value"
+                           ${filter.operator === 'is_null' || filter.operator === 'is_not_null' ? 'disabled' : ''}>
+                </div>
+                <div class="col-md-1">
+                    <button type="button" class="btn btn-sm btn-danger" data-filter-id="${filter.id}" data-action="remove">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+    
+    getColumnOptions(selectedColumn) {
+        let options = '';
+        this.state.columns.forEach(column => {
+            if (column.searchable) {
+                const selected = column.key === selectedColumn ? 'selected' : '';
+                options += `<option value="${column.key}" ${selected}>${column.label}</option>`;
+            }
+        });
+        return options;
+    }
+    
+    bindFilterEvents() {
+        const self = this;
+        
+        // 필터 값 변경 이벤트
+        $(`#${this.containerId}_advancedFilters`).off('change').on('change', 'select, input', function() {
+            const filterId = parseInt($(this).data('filter-id'));
+            const field = $(this).data('field');
+            const value = $(this).val();
+            
+            const filter = self.state.advancedFilters.find(f => f.id === filterId);
+            if (filter) {
+                filter[field] = value;
+                
+                // operator가 is_null이나 is_not_null이면 value 입력창 비활성화
+                if (field === 'operator') {
+                    const valueInput = $(`input[data-filter-id="${filterId}"][data-field="value"]`);
+                    if (value === 'is_null' || value === 'is_not_null') {
+                        valueInput.prop('disabled', true).val('');
+                        filter.value = '';
+                    } else {
+                        valueInput.prop('disabled', false);
+                    }
+                }
+            }
+        });
+        
+        // 필터 삭제 이벤트
+        $(`#${this.containerId}_advancedFilters`).off('click').on('click', 'button[data-action="remove"]', function() {
+            const filterId = parseInt($(this).data('filter-id'));
+            self.removeAdvancedFilter(filterId);
+        });
+    }
+    
+    removeAdvancedFilter(filterId) {
+        this.state.advancedFilters = this.state.advancedFilters.filter(f => f.id !== filterId);
+        this.renderAdvancedFilters();
+    }
+    
+    applyAdvancedSearch() {
+        // 유효한 필터만 남기기
+        this.state.advancedFilters = this.state.advancedFilters.filter(filter => 
+            filter.column && (
+                filter.operator === 'is_null' || 
+                filter.operator === 'is_not_null' || 
+                filter.value.trim()
+            )
+        );
+        
+        if (this.state.advancedFilters.length === 0) {
+            alert('적어도 하나의 유효한 검색 조건을 입력해주세요.');
+            return;
+        }
+        
+        // 기본 검색 초기화
+        this.state.searchColumn = null;
+        this.state.searchValue = '';
+        $(`#${this.containerId}_searchColumn`).val('');
+        $(`#${this.containerId}_searchValue`).val('');
+        
+        this.state.currentPage = 1;
+        this.loadData();
+    }
+    
+    clearAdvancedFilters() {
+        this.state.advancedFilters = [];
+        this.state.filterCounter = 0;
+        this.renderAdvancedFilters();
     }
 }
 

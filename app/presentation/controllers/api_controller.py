@@ -42,6 +42,16 @@ def get_table_data(table_name):
         sort_column = request.args.get('sort_column')
         sort_direction = request.args.get('sort_direction', 'ASC').upper()
         
+        # 고급 검색 필터 파라미터
+        advanced_filters_json = request.args.get('advanced_filters')
+        advanced_filters = None
+        if advanced_filters_json:
+            try:
+                import json
+                advanced_filters = json.loads(advanced_filters_json)
+            except (json.JSONDecodeError, TypeError):
+                advanced_filters = None
+        
         # 페이지당 항목 수 제한 (성능 보호)
         per_page = min(per_page, 100)
         
@@ -61,7 +71,8 @@ def get_table_data(table_name):
             search_column=search_column,
             search_value=search_value,
             sort_column=sort_column,
-            sort_direction=sort_direction
+            sort_direction=sort_direction,
+            advanced_filters=advanced_filters
         )
         
         return jsonify({
