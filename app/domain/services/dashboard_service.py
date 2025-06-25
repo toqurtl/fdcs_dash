@@ -9,6 +9,8 @@ class DashboardService:
             return self._get_customer_status()
         elif route == 'product_management':
             return self._get_product_management()
+        elif route == 'data_table':
+            return self._get_data_table()
         else:
             return {'title': '데이터 없음', 'type': 'none', 'data': {}}
     
@@ -201,4 +203,13 @@ class DashboardService:
                     ['태블릿', '전자제품', '600,000원', '10개', '1개', '600,000원']
                 ]
             }
+        }
+    
+    def _get_data_table(self):
+        """데이터 조회 페이지"""
+        return {
+            'title': '데이터 조회',
+            'type': 'custom',
+            'template': 'dashboard/table_view.html',
+            'data': {}
         }

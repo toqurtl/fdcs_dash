@@ -30,10 +30,12 @@ class SQLiteConnection:
                 cursor.execute(query)
             return [dict(row) for row in cursor.fetchall()]
     
-    def execute_non_query(self, query, params=None):
+    def execute_non_query(self, query, params=None, multiple=False):
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            if params:
+            if multiple and params:
+                cursor.executemany(query, params)
+            elif params:
                 cursor.execute(query, params)
             else:
                 cursor.execute(query)
@@ -159,6 +161,18 @@ class SQLiteConnection:
                     INSERT INTO business_contents (category_id, name, route, icon, order_num)
                     VALUES (1, ?, ?, ?, ?)
                 """, (name, route, icon, order_num))
+            
+            # 데이터 분석 카테고리 추가
+            cursor.execute("""
+                INSERT INTO business_categories (name, description, order_num) 
+                VALUES ('데이터 분석', '대용량 데이터 조회 및 분석', 2)
+            """)
+            
+            # 데이터 분석 콘텐츠
+            cursor.execute("""
+                INSERT INTO business_contents (category_id, name, route, icon, order_num)
+                VALUES (2, '데이터 조회', 'data_table', 'fas fa-table', 1)
+            """)
             
             # 고객 데이터
             customers = [

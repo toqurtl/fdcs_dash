@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+
+{% block title %}AdminLTE 3 | 데이터 조회{% endblock %}
+
+{% block extra_css %}
+<style>
+.table-selector {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.table-card {
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.table-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.table-card.active {
+    border: 2px solid #007bff;
+    background-color: #f8f9fa;
+}
+
+.stats-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 10px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="table-selector">
+            <h4><i class="fas fa-database"></i> 대용량 데이터 조회 시스템</h4>
+            <p class="mb-0">검색, 정렬, 페이지네이션을 지원하는 고급 테이블 시스템입니다.</p>
+        </div>
+    </div>
+</div>
+
+<!-- 테이블 선택 카드들 -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card table-card" data-table="orders_view">
+            <div class="card-body text-center">
+                <i class="fas fa-shopping-cart fa-3x text-primary mb-3"></i>
+                <h5>주문 현황</h5>
+                <p class="text-muted">고객별 주문 내역과 상품 정보</p>
+                <span class="badge badge-info" id="orders_count">로딩중...</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card table-card" data-table="customers">
+            <div class="card-body text-center">
+                <i class="fas fa-users fa-3x text-success mb-3"></i>
+                <h5>고객 관리</h5>
+                <p class="text-muted">고객 정보 및 지역별 분포</p>
+                <span class="badge badge-success" id="customers_count">로딩중...</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card table-card" data-table="products">
+            <div class="card-body text-center">
+                <i class="fas fa-box fa-3x text-warning mb-3"></i>
+                <h5>상품 목록</h5>
+                <p class="text-muted">상품 정보 및 재고 현황</p>
+                <span class="badge badge-warning" id="products_count">로딩중...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 테이블 컨테이너 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-table"></i> 
+                    <span id="current-table-title">테이블을 선택해주세요</span>
+                </h3>
+                <div class="card-tools">
+                    <button type="button" class="btn btn-sm btn-primary" id="refresh-table" style="display: none;">
+                        <i class="fas fa-sync-alt"></i> 새로고침
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="table-container">
+                    <div class="text-center text-muted py-5">
+                        <i class="fas fa-table fa-3x mb-3"></i>
+                        <h5>조회할 테이블을 선택해주세요</h5>
+                        <p>위의 카드를 클릭하여 데이터를 조회할 수 있습니다.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 통계 정보 -->
+<div class="row" id="stats-section" style="display: none;">
+    <div class="col-md-3">
+        <div class="stats-card p-3 text-center">
+            <h4 id="stat-total">0</h4>
+            <small>총 데이터</small>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card p-3 text-center">
+            <h4 id="stat-pages">0</h4>
+            <small>총 페이지</small>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card p-3 text-center">
+            <h4 id="stat-current">0</h4>
+            <small>현재 페이지</small>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card p-3 text-center">
+            <h4 id="stat-showing">0</h4>
+            <small>표시 중</small>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/advanced-table.js') }}"></script>
+<script>
+$(document).ready(function() {
+    let currentTable = null;
+    
+    // 테이블 선택 카드 클릭 이벤트
+    $('.table-card').on('click', function() {
+        const tableName = $(this).data('table');
+        selectTable(tableName);
+    });
+    
+    // 새로고침 버튼
+    $('#refresh-table').on('click', function() {
+        if (currentTable) {
+            currentTable.refresh();
+        }
+    });
+    
+    function selectTable(tableName) {
+        // 카드 활성화 상태 변경
+        $('.table-card').removeClass('active');
+        $(`.table-card[data-table="${tableName}"]`).addClass('active');
+        
+        // 테이블 제목 변경
+        const titles = {
+            'orders_view': '주문 현황',
+            'customers': '고객 관리', 
+            'products': '상품 목록'
+        };
+        $('#current-table-title').text(titles[tableName] || tableName);
+        
+        // 새로고침 버튼 표시
+        $('#refresh-table').show();
+        
+        // 기존 테이블 제거
+        if (currentTable) {
+            currentTable = null;
+        }
+        
+        // 새 테이블 생성
+        $('#table-container').html('<div id="advanced-table"></div>');
+        currentTable = new AdvancedTable('advanced-table', tableName, {
+            perPage: 50,
+            showSearch: true,
+            showFilters: true,
+            showPagination: true
+        });
+        
+        // 통계 섹션 표시
+        $('#stats-section').show();
+        
+        // 테이블 데이터 로드 완료 후 통계 업데이트
+        setTimeout(updateStats, 1000);
+    }
+    
+    function updateStats() {
+        if (currentTable && currentTable.state.pagination) {
+            const p = currentTable.state.pagination;
+            $('#stat-total').text(p.total_count.toLocaleString());
+            $('#stat-pages').text(p.total_pages.toLocaleString());
+            $('#stat-current').text(p.current_page.toLocaleString());
+            
+            const start = (p.current_page - 1) * p.per_page + 1;
+            const end = Math.min(p.current_page * p.per_page, p.total_count);
+            $('#stat-showing').text(`${start}-${end}`);
+        }
+    }
+    
+    // 초기 데이터 카운트 로드
+    loadTableCounts();
+    
+    function loadTableCounts() {
+        // 각 테이블의 데이터 개수 조회
+        const tables = ['orders_view', 'customers', 'products'];
+        
+        tables.forEach(table => {
+            $.get(`/api/table/${table}?per_page=1`, function(response) {
+                if (response.success) {
+                    const count = response.data.pagination.total_count;
+                    $(`#${table.replace('_view', 's')}_count`).text(`${count.toLocaleString()}건`);
+                }
+            }).fail(function() {
+                $(`#${table.replace('_view', 's')}_count`).text('오류');
+            });
+        });
+    }
+    
+    // 페이지 새로고침 시 통계 업데이트
+    $(document).on('tableDataLoaded', function() {
+        updateStats();
+    });
+});
+</script>
+{% endblock %}
