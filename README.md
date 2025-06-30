@@ -32,6 +32,7 @@ pip install -r requirements.txt
 ### 3. 데이터베이스 초기화
 ```bash
 python3 init_database.py
+python3 generate_sample_data.py
 ```
 
 ### 4. 서버 실행
